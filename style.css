@@ -1,7 +1,10 @@
 
 body {
-  font-family: sans-serif;
-  background: #f4f4f4;
+  font-family: 'Segoe UI', sans-serif;
+  background: #f0f4f8;
+  color: #222;
   padding: 2rem;
-  color: #333;
+}
+h1 {
+  color: #2a4b8d;
 }
