@@ -1,0 +1,576 @@
+import React, { useState, useEffect, useRef } from 'react';
+
+// Main App component
+const App = () => {
+  // State to manage the current step of the lesson
+  const [currentStep, setCurrentStep] = useState(0);
+  // State for vocabulary words and their definitions
+  const [vocabWords, setVocabWords] = useState([
+    { id: 1, word: 'uniform', definition: 'a set outfit that a student or worker must wear', matched: false },
+    { id: 2, word: 'proponents', definition: 'people who support an idea or rule', matched: false },
+    { id: 3, word: 'dress code', definition: 'a rule that sets out the clothing requirements', matched: false },
+    { id: 4, word: 'blouse', definition: 'a dress shirt (with collar) for girls', matched: false },
+    { id: 5, word: 'administrators', definition: 'people who help run the day-to-day business', matched: false },
+    { id: 6, word: 'gang', definition: 'a group that uses violence to achieve goals', matched: false },
+    { id: 7, word: 'fashion sense', definition: 'a good understanding of what clothing and accessories look good', matched: false },
+    { id: 8, word: 'accessories', definition: 'items that dress up an outfit, such as jewelry and scarves', matched: false },
+    { id: 9, word: 'designer clothing', definition: 'expensive clothes that have brand names', matched: false },
+    { id: 10, word: 'community', definition: 'a group with a common goal or interest', matched: false },
+  ]);
+
+  // State for selected word and definition in the matching game
+  const [selectedWord, setSelectedWord] = useState(null);
+  const [selectedDefinition, setSelectedDefinition] = useState(null);
+  // State to track if all vocabulary words are matched
+  const [allVocabMatched, setAllVocabMatched] = useState(false);
+
+  // States for brainstorming suggestions visibility
+  const [showCountrysideSuggestions, setShowCountrysideSuggestions] = useState(false);
+  const [showCitySuggestions, setShowCitySuggestions] = useState(false);
+
+  // States for student ideas and AI feedback
+  const [countrysideIdeas, setCountrysideIdeas] = useState('');
+  const [cityIdeas, setCityIdeas] = useState('');
+  const [countrysideFeedback, setCountrysideFeedback] = useState('');
+  const [cityFeedback, setCityFeedback] = useState('');
+  const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
+
+  // State for active highlighting category in prompt analysis
+  const [highlightCategory, setHighlightCategory] = useState(null); // 'topic', 'keywords', 'instructions'
+
+  // Full reading text from the PDF for highlighting
+  const readingText = `Dress for success. This is what job experts say about going to an interview or a workplace. What about going to school? Should students have to look their best in class? School uniforms are a requirement in many private schools. Proponents argue that uniforms cause students to take studying more seriously. Did you know that the word "uni" means "one"? Uniform means one form for all. A dress code often consists of a white shirt or blouse and dark pants or a skirt. Some administrators say that uniforms prevent students from being judged based on clothing. Others say it prevents theft and violence. In some countries, colors and brands are associated with gangs or beliefs. Young people who are restricted by a dress code find creative ways to express their fashion sense. They use accessories, shoes, hairstyle, and makeup to express individuality or commitment to a group. School uniforms may be expensive, but designer clothes are even more expensive. Some parents agree with school uniforms while others wish schools would let kids be kids. Do school uniforms create a sense of community in a school?`;
+
+  // IELTS Practice Prompt details for highlighting
+  const ieltsPromptContent = {
+    time: `You should spend about 40 minutes on this task.`,
+    topicIntro: `Write about the following topic.`,
+    mainTopic: `Some people believe that it is better for children to grow up in the countryside, while others argue that city life offers more advantages.`,
+    discussion: `Discuss both these views and give your own opinion.`,
+    reasonsExamples: `Give reasons for your answer and include any relevant examples from your own knowledge or experience.`,
+    wordCount: `You should write at least 250 words.`
+  };
+
+  // Define highlight colors for each category
+  const highlightColors = {
+    topic: 'bg-yellow-300',
+    keywords: 'bg-green-300',
+    instructions: 'bg-blue-300',
+  };
+
+  const promptAnalysis = {
+    topic: ['children', 'grow up', 'countryside', 'city life', 'advantages'],
+    keywords: ['Some people believe', 'others argue', 'more advantages'],
+    instructions: [
+      'You should spend about 40 minutes on this task',
+      'Write about the following topic',
+      'Discuss both these views',
+      'give your own opinion',
+      'Give reasons for your answer',
+      'include any relevant examples from your own knowledge or experience',
+      'You should write at least 250 words'
+    ]
+  };
+
+  // Function to render the IELTS prompt with highlighting
+  const renderIELTSPrompt = () => {
+    const highlightSegment = (textSegment) => {
+      let currentText = textSegment;
+      const activeCategory = highlightCategory; // Get the currently active highlighting category
+
+      if (activeCategory) {
+        const wordsToHighlight = promptAnalysis[activeCategory];
+        const colorClass = highlightColors[activeCategory];
+
+        wordsToHighlight.forEach(phrase => {
+          const escapedPhrase = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          // Use a regex that is less strict about word boundaries if phrases might include punctuation or not be full words
+          const regex = new RegExp(`(${escapedPhrase})`, 'gi');
+          currentText = currentText.replace(regex, `<span class="${colorClass} px-1 rounded-md font-semibold">$1</span>`);
+        });
+      }
+      return <span dangerouslySetInnerHTML={{ __html: currentText }} />;
+    };
+
+    return (
+      <>
+        <p className="mb-2">{highlightSegment(ieltsPromptContent.time)}</p>
+        <p className="mb-4">{highlightSegment(ieltsPromptContent.topicIntro)}</p>
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg shadow-sm font-mono text-blue-800">
+          <p className="mb-2">{highlightSegment(ieltsPromptContent.mainTopic)}</p>
+          <p className="mb-2">{highlightSegment(ieltsPromptContent.discussion)}</p>
+          <p className="mb-2">{highlightSegment(ieltsPromptContent.reasonsExamples)}</p>
+          <p>{highlightSegment(ieltsPromptContent.wordCount)}</p>
+        </div>
+      </>
+    );
+  };
+
+
+  // Shuffle definitions for the matching game
+  const [shuffledDefinitions, setShuffledDefinitions] = useState([]);
+  useEffect(() => {
+    // Shuffle definitions only once when the component mounts
+    setShuffledDefinitions(vocabWords.map(v => v.definition).sort(() => Math.random() - 0.5));
+  }, []);
+
+  // Check if all vocabulary words are matched
+  useEffect(() => {
+    setAllVocabMatched(vocabWords.every(word => word.matched));
+  }, [vocabWords]);
+
+  // Function to handle word selection in the matching game
+  const handleWordSelect = (word) => {
+    if (word.matched) return; // Cannot select already matched words
+    setSelectedWord(word);
+  };
+
+  // Function to handle definition selection in the matching game
+  const handleDefinitionSelect = (definition) => {
+    if (selectedWord) {
+      setSelectedDefinition(definition);
+      // Check if the selected word and definition form a correct pair
+      if (selectedWord.definition === definition) {
+        setVocabWords(prevWords =>
+          prevWords.map(v =>
+            v.id === selectedWord.id ? { ...v, matched: true } : v
+          )
+        );
+        setSelectedWord(null);
+        setSelectedDefinition(null);
+      } else {
+        // If incorrect, reset selections after a brief delay
+        setTimeout(() => {
+          setSelectedWord(null);
+          setSelectedDefinition(null);
+        }, 500);
+      }
+    }
+  };
+
+  // Function to render the reading text with highlighting
+  const renderReadingText = () => {
+    let highlightedText = readingText;
+    vocabWords.forEach(v => {
+      if (v.matched) {
+        // Use a regular expression to find all occurrences of the word, case-insensitive
+        const regex = new RegExp(`\\b(${v.word})\\b`, 'gi');
+        highlightedText = highlightedText.replace(regex, `<span class="bg-yellow-300 px-1 rounded-md font-semibold">$1</span>`);
+      }
+    });
+    return <p dangerouslySetInnerHTML={{ __html: highlightedText }} className="text-gray-700 leading-relaxed"></p>;
+  };
+
+  // Function to get AI feedback for student ideas
+  const getAIFeedback = async (side, studentIdeas) => {
+    setIsGeneratingFeedback(true);
+
+    // Count distinct ideas (simple approach: non-empty lines)
+    const numIdeas = studentIdeas.split('\n').filter(line => line.trim().length > 0).length;
+
+    let prompt = `You are an IELTS writing tutor. A student has brainstormed ideas for an essay. Provide concise and well-formatted feedback on their ideas. Each feedback point should be no more than 30 words and separated by a new line. Do not write the essay for them.
+    Topic: "Some people believe that it is better for children to grow up in the countryside, while others argue that city life offers more advantages."
+    Student's ideas for ${side}:
+    ${studentIdeas}
+    `;
+
+    if (numIdeas < 3) {
+      prompt += `\nAdditionally, suggest 2-3 more relevant ideas for this side in bullet point format (e.g., "- Idea 1").`;
+    }
+
+    // API call logic (as per instructions)
+    let chatHistory = [];
+    chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+    const payload = { contents: chatHistory };
+    const apiKey = ""; // Canvas will provide this
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+    try {
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json();
+      if (result.candidates && result.candidates.length > 0 &&
+          result.candidates[0].content && result.candidates[0].content.parts &&
+          result.candidates[0].content.parts.length > 0) {
+        const text = result.candidates[0].content.parts[0].text;
+        // Clean text: remove any markdown bolding, ensure newline separation for points
+        // and handle potential bullet points from suggestions
+        const cleanedText = text.replace(/\*\*/g, '').split('\n').map(line => line.trim()).filter(line => line.length > 0).join('\n');
+        if (side === 'countryside') {
+          setCountrysideFeedback(cleanedText);
+        } else {
+          setCityFeedback(cleanedText);
+        }
+      } else {
+        console.error("Unexpected API response structure:", result);
+        if (side === 'countryside') {
+          setCountrysideFeedback("Error: Could not get feedback. Please try again.");
+        } else {
+          setCityFeedback("Error: Could not get feedback. Please try again.");
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching AI feedback:", error);
+      if (side === 'countryside') {
+        setCountrysideFeedback("Error: Failed to connect to AI. Please check your network.");
+      } else {
+        setCityFeedback("Error: Failed to connect to AI. Please check your network.");
+      }
+    } finally {
+      setIsGeneratingFeedback(false);
+    }
+  };
+
+  // Lesson steps configuration
+  const lessonSteps = [
+    {
+      title: "Phase 1: Engaging Warm-up & Topic Introduction",
+      content: (
+        <div className="space-y-4">
+          <h3 className="text-xl font-semibold text-blue-700">Activity 1.1: Warm-up Discussion</h3>
+          <p className="text-gray-700">
+            Look at the "Pre-Reading Warm Up Questions" on Page 1 of your worksheet. In pairs or small groups, discuss 1-2 of these questions about school uniforms.
+          </p>
+          <ul className="list-disc list-inside text-gray-700 space-y-1">
+            <li>Should elementary school students wear a uniform?</li>
+            <li>Are uniforms more expensive than designer clothes?</li>
+            <li>Do uniforms prevent violence in schools?</li>
+            <li>How can students with uniforms express their individuality?</li>
+          </ul>
+        </div>
+      ),
+    },
+    {
+      title: "Phase 1: Vocabulary Introduction & Matching",
+      content: (
+        <div className="space-y-6">
+          <h3 className="text-xl font-semibold text-blue-700">Activity 1.2: Vocabulary Matching</h3>
+          <p className="text-gray-700">Match the words on the left with their correct meanings on the right. Click a word, then click its definition.</p>
+          <div className="flex flex-col md:flex-row justify-center items-start gap-8">
+            {/* Words Column */}
+            <div className="flex flex-col gap-2 w-full md:w-1/2">
+              <h4 className="font-bold text-lg text-gray-800 mb-2">Words:</h4>
+              {vocabWords.filter(v => !v.matched).map(word => (
+                <button
+                  key={word.id}
+                  onClick={() => handleWordSelect(word)}
+                  className={`p-3 rounded-lg shadow-sm text-left transition-all duration-200
+                    ${selectedWord?.id === word.id ? 'bg-blue-200 border-blue-500 ring-2 ring-blue-500' : 'bg-white hover:bg-gray-100'}
+                    ${word.matched ? 'bg-green-100 text-gray-500 cursor-not-allowed' : 'border border-gray-300'}
+                  `}
+                  disabled={word.matched}
+                >
+                  {word.word}
+                </button>
+              ))}
+              {vocabWords.filter(v => v.matched).length > 0 && (
+                <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                  <h4 className="font-bold text-lg text-green-700 mb-2">Matched Words:</h4>
+                  <ul className="list-disc list-inside text-green-800">
+                    {vocabWords.filter(v => v.matched).map(word => (
+                      <li key={`matched-${word.id}`}>{word.word} - {word.definition}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {/* Definitions Column */}
+            <div className="flex flex-col gap-2 w-full md:w-1/2">
+              <h4 className="font-bold text-lg text-gray-800 mb-2">Definitions:</h4>
+              {shuffledDefinitions.filter(def => !vocabWords.some(v => v.matched && v.definition === def)).map((definition, index) => (
+                <button
+                  key={index}
+                  onClick={() => handleDefinitionSelect(definition)}
+                  className={`p-3 rounded-lg shadow-sm text-left transition-all duration-200
+                    ${selectedDefinition === definition ? 'bg-purple-200 border-purple-500 ring-2 ring-purple-500' : 'bg-white hover:bg-gray-100'}
+                    ${vocabWords.some(v => v.matched && v.definition === definition) ? 'bg-green-100 text-gray-500 cursor-not-allowed' : 'border border-gray-300'}
+                  `}
+                  disabled={vocabWords.some(v => v.matched && v.definition === definition)}
+                >
+                  {definition}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {allVocabMatched && (
+            <div className="mt-6 p-4 bg-green-100 border border-green-400 text-green-800 rounded-lg shadow-md">
+              <p className="font-semibold text-lg">Great job! All vocabulary words matched!</p>
+            </div>
+          )}
+
+          {/* Display reading text with highlighting only after all vocab is matched */}
+          {allVocabMatched && (
+            <div className="mt-8 p-6 bg-white rounded-lg shadow-md border border-gray-200">
+              <h3 className="text-xl font-semibold text-blue-700 mb-4">Reading Text (with highlighted vocabulary):</h3>
+              {renderReadingText()}
+            </div>
+          )}
+        </div>
+      ),
+      // Disable next button until all vocab is matched
+      canProceed: allVocabMatched,
+    },
+    {
+      title: "Phase 2: Deconstructing the Task & Idea Generation",
+      content: (
+        <div className="space-y-6">
+          <h3 className="text-xl font-semibold text-blue-700">Activity 2.1: Analyzing a Practice Prompt</h3>
+          <p className="text-gray-700">Let's practice analyzing an IELTS Writing Task 2 prompt. We'll break it down into key parts.</p>
+          <div className="p-6 bg-white rounded-lg shadow-md border border-gray-200">
+            {renderIELTSPrompt()}
+          </div>
+          <p className="text-gray-700 mt-6">
+            Your task: Identify Topic Words, Keywords, and Instruction Words. Click on each category below to see them highlighted in the prompt.
+            <ul className="list-disc list-inside ml-4 mt-2">
+              <li>
+                <button
+                  onClick={() => setHighlightCategory(highlightCategory === 'topic' ? null : 'topic')}
+                  className={`font-bold px-2 py-1 rounded-md transition-colors duration-200 ${highlightCategory === 'topic' ? highlightColors.topic : 'hover:bg-gray-200'}`}
+                >
+                  Topic Words
+                </button>
+                : What is the essay <i>about</i>?
+              </li>
+              <li>
+                <button
+                  onClick={() => setHighlightCategory(highlightCategory === 'keywords' ? null : 'keywords')}
+                  className={`font-bold px-2 py-1 rounded-md transition-colors duration-200 ${highlightCategory === 'keywords' ? highlightColors.keywords : 'hover:bg-gray-200'}`}
+                >
+                  Keywords
+                </button>
+                : What are the <i>specific ideas</i> being discussed?
+              </li>
+              <li>
+                <button
+                  onClick={() => setHighlightCategory(highlightCategory === 'instructions' ? null : 'instructions')}
+                  className={`font-bold px-2 py-1 rounded-md transition-colors duration-200 ${highlightCategory === 'instructions' ? highlightColors.instructions : 'hover:bg-gray-200'}`}
+                >
+                  Instruction Words
+                </button>
+                : What do you <i>need to do</i> in the essay?
+              </li>
+            </ul>
+          </p>
+
+          <h3 className="text-xl font-semibold text-blue-700 mt-8">Activities 2.2 & 2.3: Collaborative Brainstorming</h3>
+          <p className="text-gray-700">Now, let's brainstorm ideas for both sides of this practice topic. Think about why someone might support each view.</p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white p-5 rounded-lg shadow-md border border-gray-200">
+              <h4 className="font-bold text-lg text-gray-800 mb-3">Arguments for Growing Up in the Countryside:</h4>
+              <button
+                onClick={() => setShowCountrysideSuggestions(!showCountrysideSuggestions)}
+                className="mb-3 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+              >
+                {showCountrysideSuggestions ? 'Hide Suggestions' : 'Show Suggestions'}
+              </button>
+              {showCountrysideSuggestions && (
+                <ul className="list-disc list-inside text-gray-700 space-y-1 mt-2">
+                  <li>Closer to Nature & Outdoor Activities (fresh air, physical health)</li>
+                  <li>Safer Environment (lower crime, less traffic, independent play)</li>
+                  <li>Stronger Community Ties (sense of belonging, support networks)</li>
+                  <li>Less Stressful Pace of Life (quieter, slower, less pressure)</li>
+                </ul>
+              )}
+              <p className="mt-3 text-sm text-gray-600">
+                Your task: Discuss and add your own ideas here.
+              </p>
+              <textarea
+                className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 mt-3"
+                rows="4"
+                placeholder="Add your ideas here..."
+                value={countrysideIdeas}
+                onChange={(e) => setCountrysideIdeas(e.target.value)}
+              ></textarea>
+              <button
+                onClick={() => getAIFeedback('countryside', countrysideIdeas)}
+                disabled={isGeneratingFeedback || !countrysideIdeas.trim()}
+                className="mt-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isGeneratingFeedback ? 'Generating...' : 'Get AI Feedback'}
+              </button>
+              {countrysideFeedback && (
+                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-gray-700 whitespace-pre-wrap">
+                  <h5 className="font-semibold text-blue-700 mb-1">AI Feedback:</h5>
+                  <p>{countrysideFeedback}</p>
+                </div>
+              )}
+            </div>
+            <div className="bg-white p-5 rounded-lg shadow-md border border-gray-200">
+              <h4 className="font-bold text-lg text-gray-800 mb-3">Arguments for Growing Up in the City:</h4>
+              <button
+                onClick={() => setShowCitySuggestions(!showCitySuggestions)}
+                className="mb-3 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+              >
+                {showCitySuggestions ? 'Hide Suggestions' : 'Show Suggestions'}
+              </button>
+              {showCitySuggestions && (
+                <ul className="list-disc list-inside text-gray-700 space-y-1 mt-2">
+                  <li>Better Educational Opportunities (wider range of schools, programs)</li>
+                  <li>More Cultural & Recreational Activities (museums, theaters, sports)</li>
+                  <li>Greater Diversity & Exposure (different cultures, broader worldview)</li>
+                  <li>Access to Services (healthcare, transport, amenities)</li>
+                  <li>Career Opportunities for Parents (financial stability)</li>
+                </ul>
+              )}
+              <p className="mt-3 text-sm text-gray-600">
+                Your task: Discuss and add your own ideas here.
+              </p>
+              <textarea
+                className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 mt-3"
+                rows="4"
+                placeholder="Add your ideas here..."
+                value={cityIdeas}
+                onChange={(e) => setCityIdeas(e.target.value)}
+              ></textarea>
+              <button
+                onClick={() => getAIFeedback('city', cityIdeas)}
+                disabled={isGeneratingFeedback || !cityIdeas.trim()}
+                className="mt-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isGeneratingFeedback ? 'Generating...' : 'Get AI Feedback'}
+              </button>
+              {cityFeedback && (
+                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-gray-700 whitespace-pre-wrap">
+                  <h5 className="font-semibold text-blue-700 mb-1">AI Feedback:</h5>
+                  <p>{cityFeedback}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <h3 className="text-xl font-semibold text-blue-700 mt-8">Activity 2.4: Formulating a Personal Opinion</h3>
+          <p className="text-gray-700">
+            Now, decide which view you lean towards, or if you have a conditional opinion. List 1-2 concise reasons why you hold that opinion.
+          </p>
+          <div className="bg-white p-5 rounded-lg shadow-md border border-gray-200">
+            <h4 className="font-bold text-lg text-gray-800 mb-3">My Opinion & Reasons:</h4>
+            <textarea
+              className="w-full p-3 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              rows="4"
+              placeholder="Write your opinion and reasons here..."
+            ></textarea>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: "Phase 3: Mastering Essay Structure & Planning",
+      content: (
+        <div className="space-y-6">
+          <h3 className="text-xl font-semibold text-blue-700">Activity 3.1: The Essential 4-Paragraph IELTS Structure</h3>
+          <p className="text-gray-700">
+            For "Discuss both views and give your opinion" essays, a clear 4-paragraph structure is highly effective. In IELTS Writing Task 2, it's generally recommended to state your opinion at the end of the introduction.
+          </p>
+          <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+            <h4 className="font-bold text-lg text-gray-800 mb-3">Essay Structure:</h4>
+            <ul className="list-disc list-inside text-gray-700 space-y-2">
+              <li><span className="font-bold">Introduction (approx. 2-3 sentences):</span> Paraphrase the topic and state what the essay will do. Your opinion should be stated here.</li>
+              <li><span className="font-bold">Body Paragraph 1 (View 1) (approx. 4-5 sentences):</span> Focus on the first view. Include a topic sentence, explanation, and example.</li>
+              <li><span className="font-bold">Body Paragraph 2 (View 2) (approx. 4-5 sentences):</span> Focus on the second view. Similar to Body Paragraph 1, this should have a clear topic sentence, explanation, and example.</li>
+              <li><span className="font-bold">Conclusion (approx. 2-3 sentences):</span> Summarize main points from both body paragraphs and clearly restate your own opinion.</li>
+            </ul>
+          </div>
+
+          <h3 className="text-xl font-semibold text-blue-700 mt-8">Activity 3.2: Creating a Simple Essay Plan/Outline</h3>
+          <p className="text-gray-700">
+            Use this template to plan your essay for the practice prompt (countryside vs. city life). Fill in each section with keywords and short phrases.
+          </p>
+          <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
+            <h4 className="font-bold text-lg text-gray-800 mb-4">IELTS Writing Task 2 Essay Planning Template:</h4>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-gray-700 font-medium mb-1">1. Introduction</label>
+                <textarea className="w-full p-2 border border-gray-300 rounded-md" rows="2" placeholder="Sentence 1: Paraphrase topic. Sentence 2: State essay purpose and your opinion."></textarea>
+              </div>
+              <div>
+                <label className="block text-gray-700 font-medium mb-1">2. Body Paragraph 1 (View 1)</label>
+                <textarea className="w-full p-2 border border-gray-300 rounded-md" rows="3" placeholder="Topic Sentence: Main idea. Explanation/Elaboration. Example."></textarea>
+              </div>
+              <div>
+                <label className="block text-gray-700 font-medium mb-1">3. Body Paragraph 2 (View 2)</label>
+                <textarea
+                  className="w-full p-2 border border-gray-300 rounded-md"
+                  rows="3"
+                  placeholder="Topic Sentence: Main idea. Explanation/Elaboration. Example."
+                ></textarea>
+              </div>
+              <div>
+                <label className="block text-gray-700 font-medium mb-1">4. Conclusion</label>
+                <textarea
+                  className="w-full p-2 border border-gray-300 rounded-md"
+                  rows="2"
+                  placeholder="Sentence 1: Summarize main points. Sentence 2: Restate your opinion."
+                ></textarea>
+              </div>
+            </div>
+          </div>
+        </div>
+      ),
+    },
+  ];
+
+  // Function to navigate to the next step
+  const nextStep = () => {
+    if (currentStep < lessonSteps.length - 1) {
+      setCurrentStep(prev => prev + 1);
+    }
+  };
+
+  // Function to navigate to the previous step
+  const prevStep = () => {
+    if (currentStep > 0) {
+      setCurrentStep(prev => prev - 1);
+    }
+  };
+
+  const currentLesson = lessonSteps[currentStep];
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 sm:p-8 font-inter text-gray-900 flex flex-col items-center">
+      <div className="w-full max-w-4xl bg-white rounded-xl shadow-2xl p-6 sm:p-8 md:p-10 border border-blue-200">
+        <h1 className="text-3xl sm:text-4xl font-extrabold text-center text-blue-800 mb-6 sm:mb-8">
+          IELTS Writing Task 2 Masterclass
+        </h1>
+
+        {/* Lesson Step Indicator */}
+        <div className="flex justify-center items-center mb-6">
+          <span className="text-lg font-semibold text-blue-600">
+            Step {currentStep + 1} of {lessonSteps.length}: {currentLesson.title}
+          </span>
+        </div>
+
+        {/* Student Content Section */}
+        <div className="bg-gray-50 p-6 rounded-lg shadow-md border border-gray-200">
+          <h2 className="text-2xl font-bold text-gray-800 mb-4">Student Activity:</h2>
+          {currentLesson.content}
+        </div>
+
+        {/* Navigation Buttons */}
+        <div className="flex justify-between mt-8">
+          <button
+            onClick={prevStep}
+            disabled={currentStep === 0}
+            className="px-6 py-3 bg-gray-300 text-gray-800 font-semibold rounded-lg shadow-md hover:bg-gray-400 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          <button
+            onClick={nextStep}
+            disabled={currentStep === lessonSteps.length - 1 || (currentLesson.canProceed === false)}
+            className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {currentStep === lessonSteps.length - 1 ? 'Finish' : 'Next'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default App;
